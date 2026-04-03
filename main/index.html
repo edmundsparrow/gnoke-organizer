@@ -1,1 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Gnoke Organizer</title>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet"       href="../style.css" />
+  <link rel="icon"             type="image/png" href="../global.png" />
+  <link rel="apple-touch-icon" href="../global.png" />
+  <link rel="manifest"         href="../manifest.json" />
+
+  <!-- Anti-FOUC: apply saved theme before first paint -->
+  <script>
+    (function () {
+      var t = localStorage.getItem('gnoke_organizer_theme');
+      if (t) document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('../sw.js');
+    }
+  </script>
+
+  <style>
+    /* ── App-specific styles — Gnoke Organizer ── */
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; gap: 12px; margin-bottom: 20px;
+    }
+    .stat-card {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 12px;
+      text-align: center; box-shadow: var(--shadow);
+    }
+    .stat-val {
+      display: block; font-family: var(--font-display);
+      font-size: 1.7rem; font-weight: 700; color: var(--text);
+      line-height: 1;
+    }
+    .stat-val.accent { color: var(--accent); }
+    .stat-label {
+      display: block; font-family: var(--font-mono);
+      font-size: .58rem; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted);
+      margin-top: 5px;
+    }
+
+    /* Filter tabs */
+    .filter-row {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .filter-btn {
+      padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: transparent; color: var(--muted);
+      font-family: var(--font-mono); font-size: .68rem;
+      letter-spacing: .06em; text-transform: uppercase;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .filter-btn--active {
+      background: var(--accent); color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* Task list */
+    #task-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .task-empty {
+      text-align: center; padding: 48px 20px;
+      font-family: var(--font-mono); font-size: .8rem;
+      color: var(--muted); line-height: 1.7;
+      background: var(--surface); border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+    }
+
+    /* Task card */
+    .task-card {
+      display: flex; gap: 14px; align-items: flex-start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 16px;
+      box-shadow: var(--shadow);
+      transition: border-color var(--transition), box-shadow var(--transition);
+      animation: fadeUp .18s ease forwards;
+    }
+    .task-card:hover { border-color: var(--border2); box-shadow: var(--shadow-lg); }
+    .task-card--done { opacity: .62; }
+    .task-card--done:hover { opacity: .8; }
+
+    /* Checkbox */
+    .task-check {
+      flex-shrink: 0; width: 22px; height: 22px;
+      border-radius: 6px; border: 2px solid var(--border2);
+      background: transparent; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 700; color: #fff;
+      margin-top: 2px;
+      transition: background var(--transition), border-color var(--transition);
+    }
+    .task-check:hover { border-color: var(--accent); }
+    .task-check--done {
+      background: var(--accent); border-color: var(--accent);
+    }
+
+    /* Task body */
+    .task-body { flex: 1; min-width: 0; }
+
+    .task-top {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 10px;
+      margin-bottom: 6px;
+    }
+    .task-title {
+      font-size: .92rem; font-weight: 600; color: var(--text);
+      line-height: 1.4; flex: 1; word-break: break-word;
+    }
+    .task-card--done .task-title {
+      text-decoration: line-through; color: var(--muted);
+    }
+
+    /* Priority badge */
+    .pri-badge {
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+      font-size: .58rem; letter-spacing: .08em;
+      text-transform: uppercase; font-weight: 500;
+      padding: 2px 8px; border-radius: 20px;
+    }
+    .pri-badge--high   { background: var(--pri-high-lt); color: var(--pri-high); }
+    .pri-badge--medium { background: var(--pri-med-lt);  color: var(--pri-med);  }
+    .pri-badge--low    { background: var(--pri-low-lt);  color: var(--pri-low);  }
+
+    .task-notes {
+      font-size: .8rem; color: var(--muted); line-height: 1.55;
+      margin-bottom: 8px; word-break: break-word;
+    }
+
+    .task-meta {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      font-family: var(--font-mono);
+      font-size: .66rem; color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .task-actions {
+      display: flex; gap: 6px; margin-top: 8px;
+    }
+    .btn-del {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-del:hover { background: var(--red-lt); color: var(--red); border-color: var(--red); }
+
+    /* Priority selector in modals */
+    .pri-row {
+      display: flex; gap: 8px; margin-top: 4px;
+    }
+    .pri-btn {
+      flex: 1; padding: 9px 8px; border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: transparent; cursor: pointer;
+      font-size: .78rem; font-weight: 500; color: var(--muted);
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: all var(--transition);
+    }
+    .pri-btn:hover { border-color: var(--border2); color: var(--text); }
+    .pri-btn .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .pri-btn[data-priority="high"] .dot  { background: var(--pri-high); }
+    .pri-btn[data-priority="medium"] .dot { background: var(--pri-med); }
+    .pri-btn[data-priority="low"] .dot   { background: var(--pri-low); }
+
+    .pri-btn--active[data-priority="high"]   { border-color: var(--pri-high); background: var(--pri-high-lt); color: var(--pri-high); }
+    .pri-btn--active[data-priority="medium"] { border-color: var(--pri-med);  background: var(--pri-med-lt);  color: var(--pri-med);  }
+    .pri-btn--active[data-priority="low"]    { border-color: var(--pri-low);  background: var(--pri-low-lt);  color: var(--pri-low);  }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay (hidden immediately — no async DB) -->
+<div id="loading-overlay" style="display:none">
+  <div class="loader-dots">
+    <div class="loader-dot"></div>
+    <div class="loader-dot"></div>
+    <div class="loader-dot"></div>
+  </div>
+  <span class="loader-text">Loading…</span>
+</div>
+
+
+<!-- ════ TOPBAR ════ -->
+<div id="topbar">
+
+  <button id="hamburger" title="Menu">&#9776;</button>
+
+  <div id="brand">
+    <span id="brand-gnoke">Gnoke</span>
+    <span id="brand-app">Organizer</span>
+  </div>
+
+  <span id="context-info"></span>
+
+  <div class="topbar-spacer"></div>
+
+  <div class="menu-group" id="menu-group">
+
+    <div class="menu">
+      <button class="menu-btn">Tasks</button>
+      <div class="menu-content">
+        <button id="menu-new-task">+ New Task</button>
+        <hr />
+        <button id="menu-clear-completed">Clear Completed</button>
+        <button class="danger-item" id="menu-clear-all">Delete All…</button>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="menu-btn">About</button>
+      <div class="menu-content">
+        <button onclick="loadPage('about-page')">About Organizer</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="topbar-right">
+    <span id="status-chip">saved</span>
+    <button class="icon-btn" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+
+</div>
+
+
+<!-- ════ PAGES ════ -->
+<main class="pages">
+
+  <!-- MAIN PAGE -->
+  <section id="main-page" class="page active">
+    <div class="page-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Organizer</h1>
+          <p class="sub" id="task-subtitle">No tasks yet</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-task">+ New Task</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-bar">
+        <div class="stat-card">
+          <span class="stat-val" id="stat-total">0</span>
+          <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val" id="stat-active">0</span>
+          <span class="stat-label">Active</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-val accent" id="stat-done">0</span>
+          <span class="stat-label">Done</span>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="filter-row" id="filter-row">
+        <button class="filter-btn filter-btn--active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="active">Active</button>
+        <button class="filter-btn" data-filter="completed">Done</button>
+        <button class="filter-btn" data-filter="today">Today</button>
+        <button class="filter-btn" data-filter="high">⚡ High</button>
+      </div>
+
+      <!-- Task list -->
+      <div id="task-list"></div>
+
+    </div>
+  </section>
+
+
+  <!-- ABOUT PAGE -->
+  <section id="about-page" class="page">
+    <div class="page-content">
+
+      <div class="page-header">
+        <div>
+          <h1>About</h1>
+          <p class="sub">Gnoke Organizer · v1.0</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-check-update">🔄 Check for Updates</button>
+      </div>
+
+      <div class="card-grid">
+
+        <div class="form-card">
+          <h2 class="card-title">📋 Gnoke Organizer</h2>
+          <p class="hint">
+            A clean, offline-first task manager for anyone who values clarity over clutter.
+            Add tasks, set priorities, schedule deadlines, and track progress — all stored
+            locally on your device.<br /><br />
+            Your data never leaves the device.
+          </p>
+        </div>
+
+        <div class="form-card">
+          <h2 class="card-title">⚙️ Under The Hood</h2>
+          <table class="about-table">
+            <tbody id="about-tech-table"></tbody>
+          </table>
+        </div>
+
+        <div class="form-card">
+          <h2 class="card-title">👤 Author</h2>
+          <p class="hint">
+            <strong>Edmund Sparrow</strong><br />
+            Part of the <strong>Gnoke Suite</strong> — offline-first tools
+            for developers, retailers, and independent builders.
+          </p>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+            <a class="btn btn-outline" href="mailto:edmundsparrow@gmail.com">✉ Email</a>
+            <a class="btn btn-outline" href="https://github.com/edmundsparrow" target="_blank" rel="noopener">⌥ GitHub</a>
+            <a class="btn btn-outline" href="https://selar.com/showlove/edmundsparrow" target="_blank" rel="noopener">❤️ Support</a>
+          </div>
+        </div>
+
+        <div class="form-card" id="update-card">
+          <h2 class="card-title">🔄 Updates</h2>
+          <p class="hint">
+            Running <strong>v1.0</strong>.
+            Click "Check for Updates" above to compare against the latest GitHub release.
+          </p>
+        </div>
+
+        <div class="form-card">
+          <h2 class="card-title">📜 License</h2>
+          <p class="hint">
+            Free and open source under the
+            <strong>GNU General Public License v3.0</strong>.<br /><br />
+            Use it, modify it, share it — but keep it open.
+            Commercial use requires explicit permission from the author.
+          </p>
+          <p class="hint" style="margin-top:10px;font-family:var(--font-mono);font-size:0.68rem;color:var(--muted)">
+            © 2026 Edmund Sparrow — Gnoke Suite
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+
+<!-- ════ MODALS ════ -->
+
+<!-- Add Task -->
+<div class="modal-overlay" id="add-task-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>New Task</h3>
+      <button class="modal-close" onclick="UI.closeModal('add-task-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="color:var(--text)">
+
+      <div class="form-group">
+        <label for="task-title">Title *</label>
+        <input type="text" id="task-title" placeholder="What needs to be done?" autocomplete="off" />
+      </div>
+
+      <div class="form-group">
+        <label for="task-notes">Notes</label>
+        <textarea id="task-notes" placeholder="Add details or context…"></textarea>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label for="task-date">Date</label>
+          <input type="date" id="task-date" />
+        </div>
+        <div>
+          <label for="task-time">Time</label>
+          <input type="time" id="task-time" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Priority</label>
+        <div class="pri-row" id="add-priority-btns">
+          <button class="pri-btn" data-priority="low">
+            <span class="dot"></span> Low
+          </button>
+          <button class="pri-btn pri-btn--active" data-priority="medium">
+            <span class="dot"></span> Medium
+          </button>
+          <button class="pri-btn" data-priority="high">
+            <span class="dot"></span> High
+          </button>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="UI.closeModal('add-task-modal')">Cancel</button>
+      <button class="btn btn-primary" id="btn-add-task">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Task -->
+<div class="modal-overlay" id="edit-task-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Edit Task</h3>
+      <button class="modal-close" onclick="UI.closeModal('edit-task-modal')">✕</button>
+    </div>
+    <div class="modal-body" style="color:var(--text)">
+
+      <div class="form-group">
+        <label for="edit-title">Title *</label>
+        <input type="text" id="edit-title" autocomplete="off" />
+      </div>
+
+      <div class="form-group">
+        <label for="edit-notes">Notes</label>
+        <textarea id="edit-notes"></textarea>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label for="edit-date">Date</label>
+          <input type="date" id="edit-date" />
+        </div>
+        <div>
+          <label for="edit-time">Time</label>
+          <input type="time" id="edit-time" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Priority</label>
+        <div class="pri-row" id="edit-priority-btns">
+          <button class="pri-btn" data-priority="low">
+            <span class="dot"></span> Low
+          </button>
+          <button class="pri-btn" data-priority="medium">
+            <span class="dot"></span> Medium
+          </button>
+          <button class="pri-btn" data-priority="high">
+            <span class="dot"></span> High
+          </button>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="UI.closeModal('edit-task-modal')">Cancel</button>
+      <button class="btn btn-primary" id="btn-save-edit">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm: Delete All -->
+<div class="modal-overlay" id="clear-all-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Delete All Tasks?</h3>
+      <button class="modal-close" onclick="UI.closeModal('clear-all-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      This will permanently delete every task, including completed ones.
+      This cannot be undone.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="UI.closeModal('clear-all-modal')">Cancel</button>
+      <button class="btn btn-danger" id="btn-confirm-clear-all">Delete All</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Toast -->
+<div id="toast"></div>
+
+
+<!-- ════ MOBILE DRAWER ════ -->
+<div id="drawer-overlay"></div>
+
+<nav id="drawer" aria-label="Mobile navigation">
+  <div id="drawer-header">
+    <div id="drawer-brand">
+      <span id="drawer-gnoke">Gnoke</span>
+      <span id="drawer-app">Organizer</span>
+    </div>
+    <button id="drawer-close" title="Close">✕</button>
+  </div>
+
+  <div class="drawer-section">Tasks</div>
+  <button class="drawer-btn" onclick="UI.openModal('add-task-modal'); Drawer.close();">+ New Task</button>
+  <button class="drawer-btn" onclick="/* handled via menu-clear-completed */ document.getElementById('menu-clear-completed').click(); Drawer.close();">Clear Completed</button>
+  <button class="drawer-btn danger" onclick="document.getElementById('menu-clear-all').click(); Drawer.close();">Delete All…</button>
+
+  <div class="drawer-section">More</div>
+  <button class="drawer-btn" onclick="loadPage('about-page'); Drawer.close();">About Organizer</button>
+</nav>
+
+
+<!-- ════ SCRIPTS — load order mandatory ════ -->
+<script src="../js/state.js"></script>
+<script src="../js/theme.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/update.js"></script>
+<script src="../js/app.js"></script>
+
+</body>
+</html>
